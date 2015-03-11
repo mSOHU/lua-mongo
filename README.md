@@ -13,7 +13,9 @@ Install lua-bson first.
 https://github.com/cloudwu/lua-bson
 
 cd lua-bson
+
 git clone https://github.com/keplerproject/lua-compat-5.2
+
 make linux
 
 
