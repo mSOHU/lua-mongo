@@ -1,6 +1,6 @@
 #include <lua.h>
 #include <lauxlib.h>
-#include <compat-5.2.h">
+#include <compat-5.2.h>
 
 #include <errno.h>
 

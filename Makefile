@@ -15,6 +15,10 @@ linux: mongo.so
 	$(INSTALL) mongo.so /usr/local/lib/lua/5.1/
 	$(INSTALL) mongo.lua /usr/local/share/lua/5.1/
 
+nginx: mongo_ngx.so
+	$(INSTALL) mongo_ngx.so /usr/local/lib/lua/5.1/mongo.so
+	$(INSTALL) mongo.lua /usr/local/share/lua/5.1/
+
 mongo.dll : lua-mongo.c lua-socket.c
 	gcc --shared -Wall -g $^ -o$@ $(LUA_INCLUDE) $(LUALIB) $(SOCKETLIB)
 
@@ -24,5 +28,8 @@ lbitlib.a :
 mongo.so : lua-mongo.c lua-socket.c lbitlib.a
 	gcc --shared -Wall -fPIC -g $^ -o$@  -Ilua-compat-5.2/c-api $(LUA_INCLUDE) $(LUALIB)
 
+mongo_ngx.so : lua-mongo.c lbitlib.a
+	gcc --shared -Wall -fPIC -g $^ -o$@  -Ilua-compat-5.2/c-api $(LUA_INCLUDE) $(LUALIB)
+
 clean:
-	rm -f mongo.dll mongo.so lbitlib.a
+	rm -f mongo.dll mongo.so mongo_ngx.so lbitlib.a
