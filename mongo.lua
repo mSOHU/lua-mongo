@@ -1,5 +1,5 @@
 local bson = require "bson"
-local socket = require "mongo.socket"
+local socket = ngx.socket.tcp
 local driver = require "mongo.driver"
 local rawget = rawget
 local assert = assert
@@ -65,7 +65,8 @@ local collection_meta = {
 function mongo.client( obj )
 	obj.port = obj.port or 27017
 	obj.__id = 0
-	obj.__sock = assert(socket.open(obj.host, obj.port),"Connect failed")
+	obj.__sock = socket()
+    assert(obj.__sock:connect(obj.host, obj.port),"Connect failed")
 	return setmetatable(obj, client_meta)
 end
 
@@ -85,9 +86,36 @@ end
 
 function mongo_client:disconnect()
 	if self.__sock then
-		socket.close(self.__sock)
+		self.__sock:close()
 		self.__sock = nil
 	end
+end
+
+function mongo_client:set_keepalive(...)
+    local sock = self.__sock
+    if not sock then
+        return nil, "not initialized"
+    end
+
+    return sock:setkeepalive(...)
+end
+
+function mongo_client:get_reused_times(timeout)
+    local sock = self.__sock
+    if not sock then
+        return nil, "not initialized"
+    end
+
+    return sock:getreusedtimes(timeout)
+end
+
+function mongo_client:set_timeout(timeout)
+    local sock = self.__sock
+    if not sock then
+        return nil, "not initialized"
+    end
+
+    return sock:settimeout(timeout)
 end
 
 function mongo_client:genId()
@@ -104,9 +132,32 @@ function mongo_client:runCommand(...)
 end
 
 local function get_reply(sock, result)
-	local length = driver.length(socket.read(sock, 4))
-	local reply = socket.read(sock, length)
+	local length = driver.length(sock:receive(4))
+	local reply = sock:receive(length)
 	return reply, driver.reply(reply, result)
+end
+
+local function pass_digest ( username , password )
+    return ngx.md5(username .. ":mongo:" .. password)
+end
+
+function mongo_db:auth(username, password)
+    local r, err = self:runCommand("getnonce")
+    if not r then
+        return nil, err
+    end
+
+    local digest = ngx.md5( r.nonce .. username .. pass_digest ( username , password ) )
+
+    r, err = self:runCommand(
+            "authenticate", true,
+            "user", username,
+            "nonce", r.nonce,
+            "key", digest)
+    if not r then
+        return nil, err
+    end
+    return 1
 end
 
 function mongo_db:runCommand(cmd,cmd_v,...)
@@ -114,13 +165,17 @@ function mongo_db:runCommand(cmd,cmd_v,...)
 	local sock = self.connection.__sock
 	local bson_cmd
 	if not cmd_v then
-		bson_cmd = bson_encode_order(cmd,1)
+        if type(cmd) == "table" then
+            bson_cmd = bson_encode(cmd)
+        else
+            bson_cmd = bson_encode_order(cmd,1)
+        end
 	else
 		bson_cmd = bson_encode_order(cmd,cmd_v,...)
 	end
 	local pack = driver.query(request_id, 0, self.__cmd, 0, 1, bson_cmd)
 	-- todo: check send
-	socket.write(sock, pack)
+	sock:send(pack)
 
 	local _, succ, reply_id, doc = get_reply(sock)
 	assert(request_id == reply_id, "Reply from mongod error")
@@ -149,7 +204,7 @@ function mongo_collection:insert(doc)
 	local pack = driver.insert(0, self.full_name, bson_encode(doc))
 	-- todo: check send
 	-- flags support 1: ContinueOnError
-	socket.write(sock, pack)
+	sock.send(pack)
 end
 
 function mongo_collection:batch_insert(docs)
@@ -162,7 +217,7 @@ function mongo_collection:batch_insert(docs)
 	local sock = self.connection.__sock
 	local pack = driver.insert(0, self.full_name, docs)
 	-- todo: check send
-	socket.write(sock, pack)
+	sock:send(pack)
 end
 
 function mongo_collection:update(selector,update,upsert,multi)
@@ -170,14 +225,14 @@ function mongo_collection:update(selector,update,upsert,multi)
 	local sock = self.connection.__sock
 	local pack = driver.update(self.full_name, flags, bson_encode(selector), bson_encode(update))
 	-- todo: check send
-	socket.write(sock, pack)
+	sock:send(pack)
 end
 
 function mongo_collection:delete(selector, single)
 	local sock = self.connection.__sock
 	local pack = driver.delete(self.full_name, single, bson_encode(selector))
 	-- todo: check send
-	socket.write(sock, pack)
+	sock:send(pack)
 end
 
 function mongo_collection:findOne(query, selector)
@@ -186,7 +241,7 @@ function mongo_collection:findOne(query, selector)
 	local pack = driver.query(request_id, 0, self.full_name, 0, 1, query and bson_encode(query) or empty_bson, selector and bson_encode(selector))
 
 	-- todo: check send
-	socket.write(sock, pack)
+	sock:send(pack)
 
 	local _, succ, reply_id, doc = get_reply(sock)
 	assert(request_id == reply_id, "Reply from mongod error")
@@ -230,7 +285,7 @@ function mongo_cursor:hasNext()
 		end
 
 		--todo: check send
-		socket.write(sock, pack)
+		sock:send(pack)
 
 		local data, succ, reply_id, doc, cursor = get_reply(sock, self.__document)
 		assert(request_id == reply_id, "Reply from mongod error")
@@ -281,7 +336,7 @@ function mongo_cursor:close()
 		local sock = self.__collection.connection.__sock
 		local pack = driver.kill(self.__cursor)
 		-- todo: check send
-		socket.write(sock, pack)
+		sock:send(pack)
 	end
 end
 
