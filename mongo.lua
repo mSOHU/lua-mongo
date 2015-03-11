@@ -100,13 +100,13 @@ function mongo_client:set_keepalive(...)
     return sock:setkeepalive(...)
 end
 
-function mongo_client:get_reused_times(timeout)
+function mongo_client:get_reused_times()
     local sock = self.__sock
     if not sock then
         return nil, "not initialized"
     end
 
-    return sock:getreusedtimes(timeout)
+    return sock:getreusedtimes()
 end
 
 function mongo_client:set_timeout(timeout)
@@ -236,6 +236,7 @@ function mongo_collection:delete(selector, single)
 end
 
 function mongo_collection:findOne(query, selector)
+    -- selector: { field1 = true, ... }
 	local request_id = self.connection:genId()
 	local sock = self.connection.__sock
 	local pack = driver.query(request_id, 0, self.full_name, 0, 1, query and bson_encode(query) or empty_bson, selector and bson_encode(selector))
