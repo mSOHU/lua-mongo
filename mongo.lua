@@ -250,6 +250,39 @@ function mongo_collection:findOne(query, selector)
 	return bson_decode(doc)
 end
 
+function mongo_collection:count(query)
+    local r, err = self.database:runCommand("count", self.name, "query", query or {})
+
+    if not r then
+        return nil, err
+    end
+    return r.n
+end
+
+function mongo_collection:query(query, selector, skip, limit)
+    if query and type(query) == "table" then
+        query = bson_encode(query)
+    end
+    query = query or empty_bson
+    selector = selector and bson_encode(selector)
+
+    local conn = self.connection
+    local request_id = conn:genId()
+    local sock = conn.__sock
+    local pack = driver.query(request_id, 0, self.full_name, skip or 0, limit or -1, query, selector)
+	sock:send(pack)
+
+    local results = {}
+    local data, succ, reply_id, doc = get_reply(sock, results)
+    assert(request_id == reply_id, "Reply from mongod error")
+
+    for key, value in pairs(results) do
+        results[key] = bson_decode(value)
+    end
+    -- todo: check succ
+    return results
+end
+
 function mongo_collection:find(query, selector)
 	return setmetatable( {
 		__collection = self,
