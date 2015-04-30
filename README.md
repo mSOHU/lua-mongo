@@ -15,11 +15,7 @@ This is a simple lua mongo driver, work in progress.
 ## Building
 
 Install lua-bson first.
-https://github.com/cloudwu/lua-bson
-
-cd lua-bson
-
-git clone https://github.com/keplerproject/lua-compat-5.2
+https://github.com/mSOHU/lua-bson
 
 make linux
 
