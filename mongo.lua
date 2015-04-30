@@ -147,7 +147,7 @@ function mongo_db:auth(username, password)
         return nil, err
     end
 
-    local type_name, nonce = cbson.type(r.nonce)
+    local _, nonce = cbson.type(r.nonce)
     local digest = ngx.md5( nonce .. username .. pass_digest ( username , password ) )
 
     r, err = self:runCommand(
