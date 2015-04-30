@@ -147,12 +147,13 @@ function mongo_db:auth(username, password)
         return nil, err
     end
 
-    local digest = ngx.md5( r.nonce .. username .. pass_digest ( username , password ) )
+    local type_name, nonce = cbson.type(r.nonce)
+    local digest = ngx.md5( nonce .. username .. pass_digest ( username , password ) )
 
     r, err = self:runCommand(
             "authenticate", true,
             "user", username,
-            "nonce", r.nonce,
+            "nonce", nonce,
             "key", digest)
     if not r then
         return nil, err
